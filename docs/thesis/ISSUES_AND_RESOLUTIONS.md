@@ -83,4 +83,104 @@ This file tracks every problem encountered during development, its root cause, t
 
 ---
 
+## Issue #007 — CARLA client/server version mismatch (segfault)
+
+**Date:** 2026-11-11  
+**Severity:** High (blocks CARLA connection)  
+**Description:** `pip install carla` installed version 0.9.16, but the CARLA
+server is version 0.9.15. Connecting caused a segmentation fault.  
+**Root cause:** PyPI `carla` package defaulted to 0.9.16, incompatible with
+CARLA 0.9.15 server.  
+**Resolution:** `pip install --force-reinstall --no-deps "carla==0.9.15"` to
+match the server version.  
+**Files changed:** None (venv package only)  
+**Status:** Resolved
+
+---
+
+## Issue #008 — carla.agents module not importable from venv
+
+**Date:** 2026-11-11  
+**Severity:** High (blocks BehaviorAgent import)  
+**Description:** `from carla.agents.navigation.behavior_agent import BehaviorAgent`
+failed with ModuleNotFoundError. The venv `carla` package (0.9.15 from PyPI)
+does not include the `agents` subpackage, which lives in
+`/home/alberto/carla/PythonAPI/carla/`.  
+**Root cause:** The PyPI `carla` wheel is a client-only package; the full
+PythonAPI (including agents) is only in the CARLA server installation.  
+**Resolution:** Added `/home/alberto/carla/PythonAPI/carla/` to `sys.path`
+(via `sys.path.append` in `run_closed_loop.py` and `cooperative_agent.py`)
+so that `agents` is importable as a top-level package, while `carla` itself
+is resolved from the venv site-packages.  
+**Files changed:** `tools/carla/run_closed_loop.py`,
+`tools/carla/cooperative_agent.py`  
+**Status:** Resolved
+
+---
+
+## Issue #009 — BehaviorAgent.__init__() signature mismatch
+
+**Date:** 2026-11-11  
+**Severity:** Medium (blocks agent initialization)  
+**Description:** `BehaviorAgent.__init__()` in CARLA 0.9.15 does not accept
+`target_speed` as a keyword argument. Signature is
+`__init__(self, vehicle, behavior='normal', opt_dict={}, map_inst=None, grp_inst=None)`.  
+**Root cause:** Assumed `target_speed` was a constructor parameter (as in some
+CARLA versions/documentation).  
+**Resolution:** Call `super().__init__(vehicle, behavior='normal', **kwargs)`
+without `target_speed`, then call `self.set_target_speed(target_speed)` after
+initialization.  
+**Files changed:** `tools/carla/cooperative_agent.py`  
+**Status:** Resolved
+
+---
+
+## Issue #010 — BehaviorAgent private attribute names
+
+**Date:** 2026-11-11  
+**Severity:** Medium (blocks agent control loop)  
+**Description:** `BehaviorAgent` stores the vehicle actor as `self._vehicle`
+(not `self.vehicle`) and target speed as `self._target_speed` (not
+`self.target_speed`). Additionally, `BehaviorAgent.run_step()` takes no
+arguments.  
+**Root cause:** Used public attribute names that do not exist in CARLA 0.9.15.  
+**Resolution:** Replaced all `self.vehicle` → `self._vehicle` and
+`self.target_speed` → `self._target_speed`. Changed
+`super().run_step(target_speed=...)` to `super().run_step()` (no arguments),
+setting `self._target_speed` directly before the call when speed reduction is
+needed.  
+**Files changed:** `tools/carla/cooperative_agent.py`  
+**Status:** Resolved
+
+---
+
+## Issue #011 — Git push blocked by missing credentials
+
+**Date:** 2026-11-11  
+**Severity:** Medium (blocks remote backup)  
+**Description:** `git push origin feature/phase-1-carla-integration` fails
+because GitHub credentials (username + Personal Access Token) are not
+configured in this session.  
+**Root cause:** No GitHub authentication configured on this machine.  
+**Resolution:** User must configure GitHub credentials (see instructions below)
+and run `git push origin feature/phase-1-carla-integration`.  
+**Files changed:** None  
+**Status:** Pending user action
+
+### How to configure GitHub credentials (for the user)
+
+1. Generate a Personal Access Token on GitHub:
+   Settings → Developer settings → Personal access tokens → Tokens (classic)
+   → Generate new token with `repo` scope.
+
+2. Configure git:
+   ```bash
+   cd /home/alberto/coperception-Integration
+   git config --global credential.helper store
+   git remote set-url origin https://TUO_USERNAME:IL_TUO_TOKEN@github.com/molifabio/coperception-Integration.git
+   git push origin feature/phase-1-carla-integration
+   ```
+
+---
+
 *End of ISSUES_AND_RESOLUTIONS.md*

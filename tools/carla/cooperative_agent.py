@@ -27,12 +27,22 @@ Hard constraints respected:
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Any, Dict, List, Optional, Tuple
+
+# Ensure CARLA PythonAPI carla/ package is importable so that 'agents'
+# is available as a top-level package (behavior_agent imports
+# 'from agents.navigation.basic_agent import BasicAgent').
+# Use append (not insert(0)) so that 'carla' (with Client, Vehicle, etc.)
+# is resolved from the venv site-packages first.
+_CARLA_PYTHON_API = "/home/alberto/carla/PythonAPI/carla"
+if _CARLA_PYTHON_API not in sys.path:
+    sys.path.append(_CARLA_PYTHON_API)
 
 import carla  # type: ignore
 import numpy as np
 import torch  # type: ignore
-from carla.agents.navigation.behavior_agent import BehaviorAgent  # type: ignore
+from agents.navigation.behavior_agent import BehaviorAgent  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +126,11 @@ class CooperativeAgent(BehaviorAgent):
             enable_cooperation: Whether to fuse cooperative boxes from partners.
             **kwargs: Additional arguments forwarded to BehaviorAgent.
         """
-        super().__init__(vehicle, target_speed=target_speed, **kwargs)
+        super().__init__(vehicle, behavior='normal', **kwargs)
+
+        # Set target speed after initialization (BehaviorAgent exposes
+        # set_target_speed in CARLA 0.9.15)
+        self.set_target_speed(target_speed)
 
         self.coop_partner_ids: List[int] = coop_partner_ids or []
         self.ttc_threshold = ttc_threshold
@@ -168,7 +182,7 @@ class CooperativeAgent(BehaviorAgent):
 
         # Fuse cooperative boxes from partners
         if self.enable_cooperation:
-            partner_boxes = get_cooperative_boxes(self.vehicle.id, exclude_self=True)
+            partner_boxes = get_cooperative_boxes(self._vehicle.id, exclude_self=True)
             for partner_id, data in partner_boxes.items():
                 if partner_id in self.coop_partner_ids or not self.coop_partner_ids:
                     partner_boxes_arr = data.get("boxes", None)
@@ -186,7 +200,7 @@ class CooperativeAgent(BehaviorAgent):
             self.latest_fused_boxes = np.empty((0, 7), dtype=np.float32)
 
         # Publish this vehicle's fused boxes to the cooperative registry
-        register_detection(self.vehicle.id, self.latest_fused_boxes, timestamp)
+        register_detection(self._vehicle.id, self.latest_fused_boxes, timestamp)
 
     def compute_ttc(
         self,
@@ -209,9 +223,9 @@ class CooperativeAgent(BehaviorAgent):
         box_pos = np.array([box[0], box[1], box[2]], dtype=np.float64)
         ego_pos = np.array(
             [
-                self.vehicle.get_location().x,
-                self.vehicle.get_location().y,
-                self.vehicle.get_location().z,
+                self._vehicle.get_location().x,
+                self._vehicle.get_location().y,
+                self._vehicle.get_location().z,
             ],
             dtype=np.float64,
         )
@@ -261,7 +275,7 @@ class CooperativeAgent(BehaviorAgent):
             # Perception missing: cannot confirm safety, treat as potential hazard
             logger.warning(
                 "Vehicle %d: no perception data available (missing frames=%d)",
-                self.vehicle.id,
+                self._vehicle.id,
                 self.consecutive_missing_frames,
             )
             return True, None, 0.0
@@ -298,10 +312,10 @@ class CooperativeAgent(BehaviorAgent):
             A carla.VehicleControl command.
         """
         if target_speed is not None:
-            self.target_speed = target_speed
+            self._target_speed = target_speed
 
         # Get current velocity
-        velocity = self.vehicle.get_velocity()
+        velocity = self._vehicle.get_velocity()
 
         # Detect hazards using CoPerception fused boxes only
         hazard_detected, closest_box, min_ttc = self.detect_hazards(velocity)
@@ -312,7 +326,7 @@ class CooperativeAgent(BehaviorAgent):
                 # Imminent collision: emergency brake
                 logger.warning(
                     "Vehicle %d: EMERGENCY BRAKE (TTC=%.2fs < %.2fs)",
-                    self.vehicle.id,
+                    self._vehicle.id,
                     min_ttc,
                     self.ttc_threshold * 0.5,
                 )
@@ -326,16 +340,19 @@ class CooperativeAgent(BehaviorAgent):
                 # Approaching hazard: reduce speed and increase safety margin
                 logger.info(
                     "Vehicle %d: reducing speed (TTC=%.2fs)",
-                    self.vehicle.id,
+                    self._vehicle.id,
                     min_ttc,
                 )
-                # Delegate to BehaviorAgent but with reduced target speed
-                reduced_speed = max(5.0, self.target_speed * 0.5)
-                return super().run_step(target_speed=reduced_speed)
+                # Delegate to BehaviorAgent but with reduced target speed.
+                # BehaviorAgent.run_step() takes no arguments; target speed
+                # is read from self._target_speed, which we set directly.
+                reduced_speed = max(5.0, self._target_speed * 0.5)
+                self._target_speed = reduced_speed
+                return super().run_step()
         else:
             # No hazard detected: proceed normally
             self.consecutive_missing_frames = 0
-            return super().run_step(target_speed=self.target_speed)
+            return super().run_step()
 
     def get_perception_status(self) -> Dict[str, Any]:
         """Return a dictionary with perception quality metrics.

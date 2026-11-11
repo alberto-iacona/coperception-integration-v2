@@ -45,6 +45,15 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+# Ensure CARLA PythonAPI carla/ package is importable so that 'agents'
+# is available as a top-level package (behavior_agent imports
+# 'from agents.navigation.basic_agent import BasicAgent').
+# Use append (not insert(0)) so that 'carla' (with Client, Vehicle, etc.)
+# is resolved from the venv site-packages first.
+_CARLA_PYTHON_API = "/home/alberto/carla/PythonAPI/carla"
+if _CARLA_PYTHON_API not in sys.path:
+    sys.path.append(_CARLA_PYTHON_API)
+
 import carla  # type: ignore
 import numpy as np
 
