@@ -84,7 +84,31 @@ This file records the chronological progress of the thesis project, including ma
 - Test interrupted by shell timeout (180s) before cleanup; no vehicle left in CARLA
 - Code is ready for N-vehicle experimentation
 
-### Current task: TASK-01.2 — COMPLETED (code validated with 4 vehicles on Town04)
+### Completed (TASK-02)
+- OMNeT++ network injection fully implemented and tested
+- Created `tools/carla/omnet_bridge.py`: async TCP client for OMNeT++ NetworkManager
+  (move/send commands, received notifications, box publishing/retrieval through simulated network)
+- Modified `tools/carla/cooperative_agent.py`: replaced in-memory registry with OMNeT++ bridge
+  for cooperative box exchange; added circular buffer for delay handling; packet loss and
+  delay simulation through OMNeT++ channel model
+- Modified `tools/carla/run_closed_loop.py`: integrated OMNetBridge into simulation loop
+  (update_state, update_position per tick), added CLI args (--omnet-host, --omnet-port,
+  --omnet-timeout, --omnet-default-delay, --omnet-fail-open, --no-omnet), bridge close in cleanup
+- Created `docs/thesis/TASK-02_OMNeT_Network_Injection.md` specification document
+- Live test SUCCESS: 2 vehicles, Town03, cooperation ON via OMNeT++, 20s, 685 frames logged
+  - Bridge connected to OMNeT++ on port 5555
+  - Both vehicles detected hazard (TTC < 1.5s) and applied emergency brake
+  - num_fused_boxes=2 (local + partner via OMNeT++)
+  - omnet_enabled=true in all metrics records
+
+## Status
+
+**Current phase:** Phase 2 — OMNeT++ network injection COMPLETED
+
+## Next steps
+
+- Phase 3: Konro resource management and energy modeling
+- Phase 4: Evaluation campaign with KPI analysis
 
 ## Next steps
 

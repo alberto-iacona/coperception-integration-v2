@@ -59,7 +59,8 @@ import numpy as np
 
 from scenario_setup import ScenarioSetup
 from sensor_adapter import SensorAdapter
-from cooperative_agent import CooperativeAgent, register_detection, get_cooperative_boxes
+from cooperative_agent import CooperativeAgent
+from omnet_bridge import OmnetBridge
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,32 @@ def parse_args() -> argparse.Namespace:
         "--ego-id", type=int, default=None,
         help="CARLA vehicle id to treat as ego for performance analysis "
              "(default: first spawned vehicle)",
+    )
+    # ------------------------------------------------------------------
+    # OMNeT++ bridge options
+    # ------------------------------------------------------------------
+    parser.add_argument(
+        "--omnet-host", default="127.0.0.1", help="OMNeT++ server IP address"
+    )
+    parser.add_argument(
+        "--omnet-port", type=int, default=5555, help="OMNeT++ server TCP port"
+    )
+    parser.add_argument(
+        "--omnet-timeout", type=float, default=2.0, help="Socket timeout (s)"
+    )
+    parser.add_argument(
+        "--omnet-default-delay", type=float, default=0.0,
+        help="Fallback delay in seconds when the bridge is unavailable",
+    )
+    parser.add_argument(
+        "--omnet-fail-open",
+        action="store_true",
+        help="Continue with default decisions when the bridge disconnects",
+    )
+    parser.add_argument(
+        "--no-omnet",
+        action="store_true",
+        help="Disable OMNeT++ bridge (run without network simulation)",
     )
     return parser.parse_args()
 
@@ -182,7 +209,27 @@ class ClosedLoopSimulation:
         # 4. Create sensor adapter
         self.adapter = SensorAdapter()
 
-        # 5. Create one CooperativeAgent per vehicle
+        # 5. Create OMNeT++ bridge (central bridge for all vehicles)
+        omnet_enabled = self.args.cooperation and not self.args.no_cooperation and not self.args.no_omnet
+        self.bridge: Optional[OmnetBridge] = None
+        if omnet_enabled:
+            self.bridge = OmnetBridge(
+                host=self.args.omnet_host,
+                port=self.args.omnet_port,
+                timeout=self.args.omnet_timeout,
+                default_delay=self.args.omnet_default_delay,
+                fail_open=self.args.omnet_fail_open,
+                enabled=True,
+            )
+            logger.info(
+                "OMNeT++ bridge enabled: %s:%d",
+                self.args.omnet_host,
+                self.args.omnet_port,
+            )
+        else:
+            logger.info("OMNeT++ bridge disabled (no network simulation)")
+
+        # 6. Create one CooperativeAgent per vehicle
         cooperation_enabled = self.args.cooperation and not self.args.no_cooperation
         partner_ids = [
             vid for vid in self.vehicle_ids
@@ -191,16 +238,18 @@ class ClosedLoopSimulation:
         for vehicle in vehicles:
             agent = CooperativeAgent(
                 vehicle=vehicle,
+                bridge=self.bridge,
                 target_speed=self.args.target_speed,
                 coop_partner_ids=partner_ids if cooperation_enabled else [],
                 ttc_threshold=self.args.ttc_threshold,
-                enable_cooperation=cooperation_enabled,
+                enable_cooperation=cooperation_enabled and omnet_enabled,
             )
             self.agents[vehicle.id] = agent
             logger.info(
-                "Created CooperativeAgent for vehicle %d (cooperation=%s)",
+                "Created CooperativeAgent for vehicle %d (cooperation=%s, omnet=%s)",
                 vehicle.id,
                 cooperation_enabled,
+                omnet_enabled,
             )
 
         self.start_time = time.time()
@@ -226,15 +275,30 @@ class ClosedLoopSimulation:
             world.tick()
             sim_timestamp = world.get_snapshot().timestamp.elapsed_seconds
 
+            # Update OMNeT++ bridge state (read pending network responses)
+            if self.bridge is not None:
+                self.bridge.update_state()
+
             # Extract sensor tensors for all vehicles
             all_tensors = self.adapter.extract_all_vehicles(
                 self.scenario, vehicle_ids=self.vehicle_ids
             )
 
-            # For each vehicle: run perception + control
+            # For each vehicle: update position in OMNeT++, run perception + control
             for vid in self.vehicle_ids:
                 agent = self.agents[vid]
+                vehicle = self.scenario.vehicles[self.vehicle_ids.index(vid)]
                 tensors = all_tensors.get(vid, {"lidar": None, "camera": None})
+
+                # Send vehicle position to OMNeT++ for network simulation
+                if self.bridge is not None:
+                    location = vehicle.get_location()
+                    self.bridge.update_position(
+                        vehicle_id=vid,
+                        x=location.x,
+                        y=location.y,
+                        z=location.z,
+                    )
 
                 # ------------------------------------------------------
                 # PHASE 1 PLACEHOLDER: CoPerception feature extraction
@@ -246,12 +310,11 @@ class ClosedLoopSimulation:
                     tensors, vid, sim_timestamp
                 )
 
-                # Update agent perception (fuses local + cooperative boxes)
+                # Update agent perception (fuses local + cooperative boxes through OMNeT++)
                 agent.update_perception(local_boxes, sim_timestamp)
 
                 # Execute control step
                 control = agent.run_step()
-                vehicle = self.scenario.vehicles[self.vehicle_ids.index(vid)]
                 vehicle.apply_control(control)
 
                 # Log metrics for the ego vehicle
@@ -268,6 +331,7 @@ class ClosedLoopSimulation:
                         "control_brake": control.brake,
                         "control_steer": control.steer,
                         "cooperation_enabled": self.args.cooperation and not self.args.no_cooperation,
+                        "omnet_enabled": self.bridge is not None and self.bridge.enabled,
                     })
 
         logger.info("Simulation loop ended. Total frames logged: %d", len(self.metrics))
@@ -333,11 +397,13 @@ class ClosedLoopSimulation:
         return filepath
 
     def cleanup(self) -> None:
-        """Clean up all actors and save metrics."""
+        """Clean up all actors, save metrics, and close OMNeT++ bridge."""
         logger.info("Cleaning up simulation...")
         self.save_metrics()
         if self.scenario is not None:
             self.scenario.cleanup()
+        if self.bridge is not None:
+            self.bridge.close()
         logger.info("Cleanup complete.")
 
 
