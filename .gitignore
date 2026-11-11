@@ -11,3 +11,6 @@ data/
 # File locali di configurazione/avvio (non versionare: percorsi e ambienti specifici di questo PC)
 start_up_procedure.txt
 Project.pdf
+
+# Output di test e simulazioni (non versionare)
+logs/carla_run/
