@@ -68,14 +68,26 @@ This file records the chronological progress of the thesis project, including ma
 ## Status
 
 **Current phase:** Phase 1 — CARLA + CoPerception closed-loop integration  
-**Current task:** TASK-01 — COMPLETED (code implemented, tested, committed, pushed)
+**Current task:** TASK-01.2 — Scalability to N vehicles and multiple maps (in progress)
 
 **Git remote:** `https://github.com/alberto-iacona/coperception-integration-v2` (fork)  
-**Branch:** `feature/phase-1-carla-integration` (pushed successfully)
+**Branch:** `feature/phase-1-carla-integration`
+
+### Completed (TASK-01)
+- Code implemented, tested with CARLA (2 vehicles, Town03, 20s, 677 frames)
+- Committed and pushed to fork branch `feature/phase-1-carla-integration`
+
+### Completed (TASK-01.2)
+- Generalized code to N vehicles and multiple maps (CLI args already present: --num-vehicles, --map, --ego-id)
+- Improved scenario_setup.py: cyclic spawn point indexing when N exceeds available spawn points
+- Live test with 4 vehicles on Town04: setup successful (4 vehicles spawned, all with LiDAR+camera, 4 CooperativeAgent with cooperation=True)
+- Test interrupted by shell timeout (180s) before cleanup; no vehicle left in CARLA
+- Code is ready for N-vehicle experimentation
+
+### Current task: TASK-01.2 — COMPLETED (code validated with 4 vehicles on Town04)
 
 ## Next steps
 
-- Phase 1.2: Scale to N vehicles and additional maps (Town04, Town05)
 - Phase 2: OMNeT++ network injection (packet loss, delay, jitter)
 - Phase 3: Konro resource management and energy modeling
 - Phase 4: Evaluation campaign with KPI analysis

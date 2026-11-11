@@ -141,25 +141,38 @@ class ScenarioSetup:
         if not spawn_points:
             raise RuntimeError("No spawn points available on map %s" % self.map_name)
 
+        if not spawn_points:
+            raise RuntimeError("No spawn points available on map %s" % self.map_name)
+
+        # Use cyclic indexing when N exceeds the number of available spawn points.
+        # This allows spawning more vehicles than there are predefined spawn points
+        # by reusing locations with a small offset to avoid immediate collisions.
+        effective_index = spawn_index % len(spawn_points)
         if spawn_index >= len(spawn_points):
             logger.warning(
-                "Spawn index %d out of range (%d points). Using index 0.",
+                "Spawn index %d out of range (%d points). Using cyclic index %d.",
                 spawn_index,
                 len(spawn_points),
+                effective_index,
             )
-            spawn_index = 0
 
         bp = blueprint_library.filter(vehicle_filter)[0]
         bp.set_attribute("role_name", role_name)
 
-        transform = spawn_points[spawn_index]
+        transform = spawn_points[effective_index]
+        # Apply a small longitudinal offset for cyclically reused spawn points
+        # to reduce the chance of immediate overlap between vehicles.
+        if spawn_index >= len(spawn_points):
+            transform.location.z += 0.5  # slight height offset to avoid collision
+
         vehicle = self.world.spawn_actor(bp, transform)
         self.vehicles.append(vehicle)
 
         logger.info(
-            "Spawned vehicle %s at spawn point %d (id=%d, transform=%s)",
+            "Spawned vehicle %s at spawn point %d (effective=%d, id=%d, transform=%s)",
             role_name,
             spawn_index,
+            effective_index,
             vehicle.id,
             transform,
         )
