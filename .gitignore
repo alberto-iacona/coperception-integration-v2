@@ -7,3 +7,7 @@ __pycache__/
 data/
 .cmdenv-log
 ./logs/disco_eval/no_rsu/log_test.txt
+
+# File locali di configurazione/avvio (non versionare: percorsi e ambienti specifici di questo PC)
+start_up_procedure.txt
+Project.pdf
