@@ -68,9 +68,17 @@ This file records the chronological progress of the thesis project, including ma
 ## Status
 
 **Current phase:** Phase 1 — CARLA + CoPerception closed-loop integration  
-**Current task:** TASK-01 — COMPLETED (code implemented, tested, committed)  
-**Next action:** Configure GitHub credentials and push branch
-  `feature/phase-1-carla-integration` to origin
+**Current task:** TASK-01 — COMPLETED (code implemented, tested, committed, pushed)
+
+**Git remote:** `https://github.com/alberto-iacona/coperception-integration-v2` (fork)  
+**Branch:** `feature/phase-1-carla-integration` (pushed successfully)
+
+## Next steps
+
+- Phase 1.2: Scale to N vehicles and additional maps (Town04, Town05)
+- Phase 2: OMNeT++ network injection (packet loss, delay, jitter)
+- Phase 3: Konro resource management and energy modeling
+- Phase 4: Evaluation campaign with KPI analysis
 
 ## Open questions / blockers
 
