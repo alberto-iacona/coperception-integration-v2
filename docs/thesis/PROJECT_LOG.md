@@ -101,9 +101,17 @@ This file records the chronological progress of the thesis project, including ma
   - num_fused_boxes=2 (local + partner via OMNeT++)
   - omnet_enabled=true in all metrics records
 
+### Documentation added (2026-11-12)
+- Created `docs/thesis/OMNET_LIMITATIONS_AND_ENHANCEMENTS.md`: analysis of OMNeT++ network
+  model limitations (no building shadowing, no explicit saturation, no fading) and possible
+  enhancements for environment-aware transmission
+- Created `docs/thesis/FUTURE_FEATURES_BACKLOG.md`: comprehensive backlog of features
+  for all phases (PF-01 to PF-24) that can be added at any development stage
+
 ## Status
 
-**Current phase:** Phase 2 — OMNeT++ network injection COMPLETED
+**Current phase:** Phase 2 — OMNeT++ network injection COMPLETED  
+**Ready for:** Phase 3 — Konro resource management and energy modeling
 
 ## Next steps
 
