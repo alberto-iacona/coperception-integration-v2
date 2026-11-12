@@ -62,7 +62,8 @@ class ExperimentMatrix:
             List of experiment parameter dictionaries.
         """
         maps = ["Town03", "Town04", "Town05"]
-        vehicle_counts = [2, 4, 6]
+        vehicle_counts = [4, 6, 10]
+        num_pedestrians = 4
         network_conditions = ["line_of_sight", "occluded", "degraded"]
         configurations = [
             {"cooperation": False, "konro": False, "label": "baseline_local"},
@@ -77,6 +78,7 @@ class ExperimentMatrix:
             exp: Dict[str, Any] = {
                 "map": map_name,
                 "num_vehicles": num_vehicles,
+                "num_pedestrians": num_pedestrians,
                 "network_condition": net_cond,
                 "cooperation": config["cooperation"],
                 "konro": config["konro"],
@@ -112,6 +114,8 @@ class ExperimentMatrix:
             exp["map"],
             "--num-vehicles",
             str(exp["num_vehicles"]),
+            "--num-pedestrians",
+            str(exp["num_pedestrians"]),
             "--target-speed",
             str(exp["target_speed"]),
             "--ttc-threshold",

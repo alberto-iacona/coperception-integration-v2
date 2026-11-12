@@ -35,7 +35,8 @@ the resulting KPIs to evaluate system, network, energy, safety, and comfort perf
 | Variable | Values |
 |----------|--------|
 | Map | Town03, Town04, Town05 |
-| Number of vehicles | 2, 4, 6 |
+| Number of vehicles | 4, 6, 10 |
+| Number of pedestrians | 4 (stationary or slow-walking, no sensors) |
 | Network condition | Line-of-sight, occluded (behind buildings), degraded (packet loss via OMNeT++) |
 | Cooperation | ON / OFF |
 | Konro | ON / OFF |
@@ -47,6 +48,9 @@ the resulting KPIs to evaluate system, network, energy, safety, and comfort perf
 With 3 maps × 3 vehicle counts × 2 network conditions × 3 configurations = **54 runs**.
 Each run should be repeated at least 3 times with different seeds for statistical validity
 (target: 162 runs).
+
+Pedestrians are detected by vehicle LiDAR/camera and shared through cooperative
+perception (OMNeT++). They do not carry sensors themselves.
 
 ## 3. KPIs to Measure (from ENERGY_MODEL_PARAMETERS.md sources)
 

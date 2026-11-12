@@ -167,9 +167,22 @@ This file records the chronological progress of the thesis project, including ma
   - Emergency brake functioning on both vehicles (TTC < 1.50s)
   - Metrics saved to logs/carla_run/carlaloop_20261112_093035.json
 
+### Completed (TASK-04)
+- Evaluation Campaign & KPI Analysis: analyze_results.py, run_experiment_matrix.py
+- Specification document created: TASK-04_Evaluation_KPI.md
+- Experiment matrix: 3 maps × 4-6-10 vehicles × 4 pedestrians × 3 network conditions
+  × 3 configurations = 54 runs
+- Added spawn_pedestrians() to scenario_setup.py: walker spawning with AI controller,
+  optional speed, random spawn points
+- Added --num-pedestrians CLI argument to run_closed_loop.py
+- Added --num-pedestrians to run_experiment_matrix.py command builder
+- Code supports arbitrary N vehicles and M pedestrians via CLI arguments
+- All 2 new Python files pass py_compile syntax check
+
 ## Next steps
 
-- Phase 4: Evaluation campaign with KPI analysis
+- Execute experiment matrix (Phase 4 live testing)
+- Generate analysis charts and report
 
 ## Open questions / blockers
 

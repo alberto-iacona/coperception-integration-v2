@@ -22,6 +22,7 @@ Hard constraints respected:
 from __future__ import annotations
 
 import logging
+import random
 from typing import Any, Dict, List, Optional, Tuple
 
 import carla  # type: ignore
@@ -212,6 +213,99 @@ class ScenarioSetup:
 
         logger.info("Spawned %d vehicles.", len(vehicles))
         return vehicles
+
+    def spawn_pedestrians(
+        self,
+        num_pedestrians: int = 4,
+        walker_filter: str = "walker.*",
+        speed: float = 0.0,
+        role_names: Optional[List[str]] = None,
+    ) -> List[carla.Walker]:
+        """
+        Spawn multiple pedestrians (walkers) at random locations.
+
+        Pedestrians do not carry sensors. They are intended to be detected by
+        vehicle sensors and shared through cooperative perception. Each
+        walker is spawned with a WalkerAIController so it can be made to move
+        or stay still depending on the scenario.
+
+        Args:
+            num_pedestrians: Number of pedestrians to spawn.
+            walker_filter: Blueprint filter for the pedestrian type.
+            speed: Walking speed in m/s (0.0 = stationary).
+            role_names: Optional list of role names (one per pedestrian).
+
+        Returns:
+            List of spawned CARLA walker actors.
+        """
+        assert self.world is not None
+        blueprint_library = self.world.get_blueprint_library()
+        walker_bps = blueprint_library.filter(walker_filter)
+
+        if not walker_bps:
+            raise RuntimeError("No walker blueprints available on map %s" % self.map_name)
+
+        spawn_points = self.world.get_map().get_spawn_points()
+        if not spawn_points:
+            raise RuntimeError("No spawn points available on map %s" % self.map_name)
+
+        if role_names is None:
+            role_names = [f"pedestrian_{i}" for i in range(num_pedestrians)]
+        elif len(role_names) < num_pedestrians:
+            role_names = role_names + [
+                f"pedestrian_{i}" for i in range(len(role_names), num_pedestrians)
+            ]
+
+        walkers: List[carla.Walker] = []
+        walker_controllers: List[carla.WalkerAIController] = []
+
+        for i in range(num_pedestrians):
+            bp = random.choice(walker_bps)
+            bp.set_attribute("role_name", role_names[i])
+
+            # Pick a random spawn point
+            transform = random.choice(spawn_points)
+
+            walker = self.world.try_spawn_actor(bp, transform)
+            if walker is None:
+                logger.warning("Failed to spawn pedestrian %s at transform %s", role_names[i], transform)
+                continue
+
+            # Spawn the AI controller for the walker
+            controller_bp = blueprint_library.find("controller.ai.walker")
+            controller = self.world.spawn_actor(
+                controller_bp,
+                carla.Transform(),
+                attach_to=walker,
+            )
+
+            # Start the controller
+            controller.start()
+
+            if speed > 0.0:
+                controller.go_to_location(
+                    self.world.get_random_location_from_navigation()
+                )
+                controller.set_max_speed(speed)
+
+            self.world.tick()  # Let the walker initialize
+
+            walkers.append(walker)
+            walker_controllers.append(controller)
+
+            logger.info(
+                "Spawned pedestrian %s at transform %s (id=%d)",
+                role_names[i],
+                transform,
+                walker.id,
+            )
+
+        # Store walkers for later cleanup
+        self.pedestrians = walkers
+        self.pedestrian_controllers = walker_controllers
+
+        logger.info("Spawned %d pedestrians.", len(walkers))
+        return walkers
 
     def attach_sensors(
         self,

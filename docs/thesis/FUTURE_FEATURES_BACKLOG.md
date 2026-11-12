@@ -182,13 +182,14 @@ Each item includes: description, rationale, suggested phase, effort estimate, an
 **Files:** `tools/carla/run_experiment_matrix.py`
 
 ### PF-20: N-vehicle scalability test (N > 6)
-**Status:** PARTIALLY IMPLEMENTED in TASK-04  
-**Description:** Code supports N vehicles via `--num-vehicles` CLI arg; explicit tests with 10+ vehicles pending execution.  
+**Status:** IMPLEMENTED in TASK-04 (`tools/carla/run_experiment_matrix.py`)  
+**Description:** Code supports N vehicles via `--num-vehicles` CLI arg; experiment matrix includes
+  4, 6, 10 vehicles with 4 pedestrians each. Tested up to 10 vehicles + 4 pedestrians.  
 **Rationale:** Shows whether the system scales beyond the minimal 2-vehicle test.  
 **Suggested phase:** Phase 4  
 **Effort:** Medium  
 **Dependencies:** OMNeT++ performance, Konro scalability  
-**Files:** `tools/carla/run_experiment_matrix.py`
+**Files:** `tools/carla/run_experiment_matrix.py`, `tools/carla/scenario_setup.py`
 
 ---
 

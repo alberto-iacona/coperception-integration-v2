@@ -178,6 +178,10 @@ def parse_args() -> argparse.Namespace:
         "--konro-baseline-pus", type=int, default=2,
         help="Minimum PUs guaranteed for safety functions (default: 2)",
     )
+    parser.add_argument(
+        "--num-pedestrians", type=int, default=4,
+        help="Number of pedestrians (walkers) to spawn (default: 4)",
+    )
     return parser.parse_args()
 
 
@@ -237,6 +241,12 @@ class ClosedLoopSimulation:
                 enable_lidar=True,
                 enable_camera=True,
             )
+
+        # 3b. Spawn pedestrians (walkers) - no sensors, detectable by vehicles
+        self.scenario.spawn_pedestrians(
+            num_pedestrians=self.args.num_pedestrians,
+            speed=1.0,  # walking speed
+        )
 
         # 4. Create sensor adapter
         self.adapter = SensorAdapter()
