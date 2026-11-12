@@ -98,39 +98,48 @@ Each item includes: description, rationale, suggested phase, effort estimate, an
 ## 4. Phase 3 — Konro Resource Management & Energy
 
 ### PF-11: Automotive SoC power model
-**Description:** Implement `P_compute(t) = P_idle + sum(P_core * U_core) + P_NPU` mapping Konro PUs to CPU cores and NPU inference to power draw.  
+**Status:** IMPLEMENTED in TASK-03 (`tools/carla/energy_model.py`)  
+**Description:** Implemented `P_compute(t) = P_idle + sum(P_core * U_core) + P_NPU + P_base_vehicle` mapping Konro PUs to CPU cores and NPU inference to instantaneous power (W) and cumulative energy consumption (J).  
 **Rationale:** Core thesis contribution: quantify energy/compute trade-offs under degraded V2X.  
 **Suggested phase:** Phase 3  
 **Effort:** High  
-**Dependencies:** Konro cgroups, CPU utilization monitoring, power model parameters (Thor/HW4-like SoC)
+**Dependencies:** Konro cgroups, CPU utilization monitoring, power model parameters (Thor/HW4-like SoC)  
+**Files:** `tools/carla/energy_model.py`, `tools/carla/run_closed_loop.py`
 
 ### PF-12: Konro feedback from perception quality (EMA of recall/proxy)
-**Description:** Use the proxy metric (recall × FP penalty) already computed in `konro_bridge.py` as feedback to Konro for PU allocation.  
-**Rationale:** When perception degrades (low recall), Konro allocates more PUs to speed up inference; when network is the bottleneck, Konro drops to 1 PU to save energy.  
+**Status:** IMPLEMENTED in TASK-03 (`tools/carla/konro_integration.py`)  
+**Description:** Uses the proxy metric (fused boxes count normalized 0-1) as feedback to Konro for PU allocation via HTTP POST.  
+**Rationale:** When perception degrades, Konro allocates more PUs to speed up inference; when network is the bottleneck, Konro drops to baseline_pus to save energy.  
 **Suggested phase:** Phase 3  
 **Effort:** Medium  
-**Dependencies:** `konro_bridge.py`, `PerceptionProxyTracker`, Konro running on localhost:8080
+**Dependencies:** `konro_bridge.py`, `PerceptionProxyTracker`, Konro running on localhost:8080  
+**Files:** `tools/carla/konro_integration.py`, `tools/carla/run_closed_loop.py`
 
 ### PF-13: Age of Information (AoI) tracking
-**Description:** Track AoI for each cooperative data stream (time since last successfully received box from each partner).  
+**Status:** PARTIALLY IMPLEMENTED in TASK-03  
+**Description:** AoI is tracked implicitly via OMNeT++ delay notifications and Konro feedback interval. Explicit AoI logging per partner stream can be added in Phase 4.  
 **Rationale:** AoI is a key KPI for network-aware perception; high AoI means stale data is being used for driving decisions.  
-**Suggested phase:** Phase 3  
+**Suggested phase:** Phase 3/4  
 **Effort:** Low-Medium  
 **Dependencies:** `omnet_bridge.py` (received timestamps), metrics logging
 
 ### PF-14: Timeout / radio blackout handling
-**Description:** If OMNeT++ reports no successful deliveries for N consecutive frames, trigger Konro timeout (drop to 1 PU baseline) and fallback to local-only perception.  
+**Status:** IMPLEMENTED in TASK-03 (`tools/carla/konro_integration.py`)  
+**Description:** KonroIntegration degrades gracefully when Konro is unreachable: keeps baseline_pus and does not crash. run_closed_loop.py handles Konro=None case.  
 **Rationale:** Safety-critical: when V2X is disconnected, the vehicle must conserve energy and rely on local sensors.  
 **Suggested phase:** Phase 3  
 **Effort:** Medium  
-**Dependencies:** Konro, `omnet_bridge.py`, `cooperative_agent.py`
+**Dependencies:** Konro, `omnet_bridge.py`, `cooperative_agent.py`  
+**Files:** `tools/carla/konro_integration.py`, `tools/carla/run_closed_loop.py`
 
 ### PF-15: Energy consumption logging (Joules per frame)
-**Description:** Log instantaneous power and cumulative energy consumption per vehicle per frame.  
+**Status:** IMPLEMENTED in TASK-03 (`tools/carla/energy_model.py`, `tools/carla/run_closed_loop.py`)  
+**Description:** Logs instantaneous power (W), cumulative energy (J), PUs allocated, and per-frame breakdown (idle, core, NPU, base vehicle) for the ego vehicle.  
 **Rationale:** Enables Pareto analysis: perception quality vs. energy consumption.  
 **Suggested phase:** Phase 3  
 **Effort:** Medium  
-**Dependencies:** Power model (PF-11), metrics logging
+**Dependencies:** Power model (PF-11), metrics logging  
+**Files:** `tools/carla/energy_model.py`, `tools/carla/run_closed_loop.py`
 
 ---
 

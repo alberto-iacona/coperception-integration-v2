@@ -61,6 +61,8 @@ from scenario_setup import ScenarioSetup
 from sensor_adapter import SensorAdapter
 from cooperative_agent import CooperativeAgent
 from omnet_bridge import OmnetBridge
+from energy_model import VehicleEnergyModel
+from konro_integration import KonroIntegration
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +150,34 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable OMNeT++ bridge (run without network simulation)",
     )
+    # ------------------------------------------------------------------
+    # Konro resource manager options
+    # ------------------------------------------------------------------
+    parser.add_argument(
+        "--konro-enabled",
+        action="store_true",
+        help="Enable Konro resource manager feedback (default: disabled)",
+    )
+    parser.add_argument(
+        "--konro-target", type=float, default=0.85,
+        help="Target proxy quality for Konro feedback (default: 0.85)",
+    )
+    parser.add_argument(
+        "--konro-host", default="http://localhost:8080",
+        help="Konro server address (default: http://localhost:8080)",
+    )
+    parser.add_argument(
+        "--konro-port", type=int, default=8080,
+        help="Konro server port (default: 8080)",
+    )
+    parser.add_argument(
+        "--konro-feedback-interval", type=int, default=1,
+        help="Send feedback to Konro every N frames (default: 1)",
+    )
+    parser.add_argument(
+        "--konro-baseline-pus", type=int, default=2,
+        help="Minimum PUs guaranteed for safety functions (default: 2)",
+    )
     return parser.parse_args()
 
 
@@ -163,6 +193,8 @@ class ClosedLoopSimulation:
         self.ego_id: Optional[int] = args.ego_id
         self.start_time: Optional[float] = None
         self.metrics: List[Dict[str, Any]] = []
+        self.energy_model: Optional[VehicleEnergyModel] = None
+        self.konro: Optional[KonroIntegration] = None
 
         # Ensure log directory exists
         os.makedirs(args.log_dir, exist_ok=True)
@@ -229,7 +261,48 @@ class ClosedLoopSimulation:
         else:
             logger.info("OMNeT++ bridge disabled (no network simulation)")
 
-        # 6. Create one CooperativeAgent per vehicle
+        # 6. Create energy model
+        self.energy_model = VehicleEnergyModel(
+            p_idle=20.0,
+            p_core=2.0,
+            p_npu=25.0,
+            p_base_vehicle=100.0,
+            num_cores_total=8,
+            baseline_pus=self.args.konro_baseline_pus,
+        )
+        logger.info(
+            "Energy model created: p_idle=%.1fW p_core=%.1fW p_npu=%.1fW "
+            "p_base=%.1fW cores=%d baseline_pus=%d",
+            self.energy_model.p_idle,
+            self.energy_model.p_core,
+            self.energy_model.p_npu,
+            self.energy_model.p_base_vehicle,
+            self.energy_model.num_cores_total,
+            self.energy_model.baseline_pus,
+        )
+
+        # 7. Create Konro integration
+        konro_enabled = self.args.konro_enabled and not self.args.no_omnet
+        self.konro: Optional[KonroIntegration] = None
+        if konro_enabled:
+            self.konro = KonroIntegration(
+                konro_enabled=True,
+                konro_target=self.args.konro_target,
+                feedback_interval=self.args.konro_feedback_interval,
+                baseline_pus=self.args.konro_baseline_pus,
+                host=self.args.konro_host,
+            )
+            self.konro.register()
+            logger.info(
+                "Konro integration enabled: target=%.2f baseline_pus=%d host=%s",
+                self.args.konro_target,
+                self.args.konro_baseline_pus,
+                self.args.konro_host,
+            )
+        else:
+            logger.info("Konro integration disabled")
+
+        # 8. Create one CooperativeAgent per vehicle
         cooperation_enabled = self.args.cooperation and not self.args.no_cooperation
         partner_ids = [
             vid for vid in self.vehicle_ids
@@ -239,6 +312,8 @@ class ClosedLoopSimulation:
             agent = CooperativeAgent(
                 vehicle=vehicle,
                 bridge=self.bridge,
+                energy_model=self.energy_model,
+                konro=self.konro,
                 target_speed=self.args.target_speed,
                 coop_partner_ids=partner_ids if cooperation_enabled else [],
                 ttc_threshold=self.args.ttc_threshold,
@@ -246,10 +321,11 @@ class ClosedLoopSimulation:
             )
             self.agents[vehicle.id] = agent
             logger.info(
-                "Created CooperativeAgent for vehicle %d (cooperation=%s, omnet=%s)",
+                "Created CooperativeAgent for vehicle %d (cooperation=%s, omnet=%s, konro=%s)",
                 vehicle.id,
                 cooperation_enabled,
                 omnet_enabled,
+                konro_enabled,
             )
 
         self.start_time = time.time()
@@ -313,14 +389,45 @@ class ClosedLoopSimulation:
                 # Update agent perception (fuses local + cooperative boxes through OMNeT++)
                 agent.update_perception(local_boxes, sim_timestamp)
 
+                # Read allocated PUs from Konro and update agent
+                konro_pus = self.args.konro_baseline_pus
+                if self.konro is not None:
+                    self.konro.read_allocated_pus()
+                    konro_pus = self.konro.current_pus
+                agent.set_konro_pus(konro_pus)
+
                 # Execute control step
                 control = agent.run_step()
                 vehicle.apply_control(control)
 
+                # Update Konro with proxy quality metric (use fused boxes count as proxy)
+                if self.konro is not None:
+                    # Proxy metric: based on fused boxes count (normalized 0-1)
+                    num_boxes = status["num_fused_boxes"] if (status := agent.get_perception_status()) else 0
+                    proxy = min(1.0, num_boxes / 5.0)  # 5 boxes = full quality proxy
+                    self.konro.update(
+                        num_gts=max(1, num_boxes),
+                        num_dets=max(1, num_boxes),
+                        num_tp=num_boxes,
+                        frame_index=agent.get_perception_status()["consecutive_missing_frames"],
+                    )
+
+                # Record energy for this frame
+                energy_record = None
+                if self.energy_model is not None:
+                    cpu_util = min(1.0, konro_pus / float(self.energy_model.num_cores_total))
+                    energy_record = self.energy_model.record_frame(
+                        timestamp_s=sim_timestamp,
+                        num_pus=konro_pus,
+                        cpu_utilization=cpu_util,
+                        npu_active=True,
+                        duration_s=self.args.fixed_delta_seconds,
+                    )
+
                 # Log metrics for the ego vehicle
                 if vid == self.ego_id:
                     status = agent.get_perception_status()
-                    self.metrics.append({
+                    metric_entry = {
                         "timestamp": sim_timestamp,
                         "wall_clock": time.time(),
                         "vehicle_id": vid,
@@ -332,7 +439,20 @@ class ClosedLoopSimulation:
                         "control_steer": control.steer,
                         "cooperation_enabled": self.args.cooperation and not self.args.no_cooperation,
                         "omnet_enabled": self.bridge is not None and self.bridge.enabled,
-                    })
+                        "konro_enabled": self.konro is not None and self.konro.konro_enabled,
+                        "konro_pus": konro_pus,
+                    }
+                    if energy_record is not None:
+                        metric_entry.update({
+                            "p_total_w": energy_record["p_total_w"],
+                            "p_idle_w": energy_record["p_idle_w"],
+                            "p_core_w": energy_record["p_core_w"],
+                            "p_npu_w": energy_record["p_npu_w"],
+                            "p_base_vehicle_w": energy_record["p_base_vehicle_w"],
+                            "energy_j": energy_record["energy_j"],
+                            "cumulative_energy_j": energy_record["cumulative_energy_j"],
+                        })
+                    self.metrics.append(metric_entry)
 
         logger.info("Simulation loop ended. Total frames logged: %d", len(self.metrics))
 
@@ -397,13 +517,20 @@ class ClosedLoopSimulation:
         return filepath
 
     def cleanup(self) -> None:
-        """Clean up all actors, save metrics, and close OMNeT++ bridge."""
+        """Clean up all actors, save metrics, close OMNeT++ bridge and Konro."""
         logger.info("Cleaning up simulation...")
         self.save_metrics()
         if self.scenario is not None:
             self.scenario.cleanup()
         if self.bridge is not None:
             self.bridge.close()
+        if self.konro is not None:
+            self.konro.shutdown()
+        if self.energy_model is not None:
+            logger.info(
+                "Energy model summary: %s",
+                self.energy_model.get_power_breakdown(),
+            )
         logger.info("Cleanup complete.")
 
 

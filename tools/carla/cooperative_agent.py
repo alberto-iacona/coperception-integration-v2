@@ -67,6 +67,8 @@ class CooperativeAgent(BehaviorAgent):
         self,
         vehicle: carla.Vehicle,
         bridge: Any,
+        energy_model: Optional[Any] = None,
+        konro: Optional[Any] = None,
         target_speed: float = 20.0,
         coop_partner_ids: Optional[List[int]] = None,
         ttc_threshold: float = 3.0,
@@ -80,6 +82,8 @@ class CooperativeAgent(BehaviorAgent):
         Args:
             vehicle: The CARLA vehicle actor this agent controls.
             bridge: OmnetBridge instance for network communication.
+            energy_model: VehicleEnergyModel instance for power/energy tracking.
+            konro: KonroIntegration instance for resource management feedback.
             target_speed: Desired target speed in km/h.
             coop_partner_ids: List of CARLA vehicle ids considered as cooperative
                               partners (their boxes are fused with local ones).
@@ -99,6 +103,9 @@ class CooperativeAgent(BehaviorAgent):
         self.set_target_speed(target_speed)
 
         self.bridge = bridge
+        self.energy_model = energy_model
+        self.konro = konro
+        self.konro_pus = 2  # Default baseline PUs; updated via set_konro_pus()
         self.coop_partner_ids: List[int] = coop_partner_ids or []
         self.ttc_threshold = ttc_threshold
         self.enable_cooperation = enable_cooperation
@@ -294,6 +301,20 @@ class CooperativeAgent(BehaviorAgent):
         # Maintain fixed buffer length
         if len(self._partner_boxes_buffer[partner_id]) > self._max_buffer_len:
             self._partner_boxes_buffer[partner_id].pop(0)
+
+    def set_konro_pus(self, num_pus: int) -> None:
+        """
+        Update the number of PUs allocated by Konro for this vehicle.
+
+        Args:
+            num_pus: Number of Processing Units allocated by Konro.
+        """
+        self.konro_pus = max(1, num_pus)
+        logger.debug(
+            "Vehicle %d: Konro PUs updated to %d",
+            self._vehicle.id,
+            self.konro_pus,
+        )
 
     def compute_ttc(
         self,

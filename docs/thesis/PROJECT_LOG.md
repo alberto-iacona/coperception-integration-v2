@@ -110,19 +110,66 @@ This file records the chronological progress of the thesis project, including ma
 
 ## Status
 
-**Current phase:** Phase 2 — OMNeT++ network injection COMPLETED  
-**Ready for:** Phase 3 — Konro resource management and energy modeling
+**Current phase:** Phase 3 — Konro resource management and energy modeling (in progress)
+
+**Git remote:** `https://github.com/alberto-iacona/coperception-integration-v2` (fork)  
+**Branch:** `feature/phase-1-carla-integration`
+
+### Completed (TASK-01)
+- Code implemented, tested with CARLA (2 vehicles, Town03, 20s, 677 frames)
+- Committed and pushed to fork branch `feature/phase-1-carla-integration`
+
+### Completed (TASK-01.2)
+- Generalized code to N vehicles and multiple maps (CLI args already present: --num-vehicles, --map, --ego-id)
+- Improved scenario_setup.py: cyclic spawn point indexing when N exceeds available spawn points
+- Live test with 4 vehicles on Town04: setup successful (4 vehicles spawned, all with LiDAR+camera, 4 CooperativeAgent with cooperation=True)
+- Test interrupted by shell timeout (180s) before cleanup; no vehicle left in CARLA
+- Code is ready for N-vehicle experimentation
+
+### Completed (TASK-02)
+- OMNeT++ network injection fully implemented and tested
+- Created `tools/carla/omnet_bridge.py`: async TCP client for OMNeT++ NetworkManager
+  (move/send commands, received notifications, box publishing/retrieval through simulated network)
+- Modified `tools/carla/cooperative_agent.py`: replaced in-memory registry with OMNeT++ bridge
+  for cooperative box exchange; added circular buffer for delay handling; packet loss and
+  delay simulation through OMNeT++ channel model
+- Modified `tools/carla/run_closed_loop.py`: integrated OMNetBridge into simulation loop
+  (update_state, update_position per tick), added CLI args (--omnet-host, --omnet-port,
+  --omnet-timeout, --omnet-default-delay, --omnet-fail-open, --no-omnet), bridge close in cleanup
+- Created `docs/thesis/TASK-02_OMNeT_Network_Injection.md` specification document
+- Live test SUCCESS: 2 vehicles, Town03, cooperation ON via OMNeT++, 20s, 685 frames logged
+  - Bridge connected to OMNeT++ on port 5555
+  - Both vehicles detected hazard (TTC < 1.5s) and applied emergency brake
+  - num_fused_boxes=2 (local + partner via OMNeT++)
+  - omnet_enabled=true in all metrics records
+
+### Documentation added (2026-11-12)
+- Created `docs/thesis/OMNET_LIMITATIONS_AND_ENHANCEMENTS.md`: analysis of OMNeT++ network
+  model limitations (no building shadowing, no explicit saturation, no fading) and possible
+  enhancements for environment-aware transmission
+- Created `docs/thesis/FUTURE_FEATURES_BACKLOG.md`: comprehensive backlog of features
+  for all phases (PF-01 to PF-24) that can be added at any development stage
+- Created `docs/thesis/ENERGY_MODEL_PARAMETERS.md`: bibliographic research on SoC power
+  consumption (NVIDIA Thor/Orin, Tesla HW4, Qualcomm Snapdragon Ride, Mobileye EyeQ),
+  computational energy model (Lin et al. ASPLOS 2018), safety KPIs (TTC, stopping distance,
+  jerk, AoI), EV energy consumption impact, with 29 numbered sources
+
+### In progress (TASK-03)
+- Konro resource management & energy modeling: energy_model.py, konro_integration.py,
+  run_closed_loop.py integration
+- Specification document created: TASK-03_Konro_Resource_Energy.md
 
 ## Next steps
 
-- Phase 3: Konro resource management and energy modeling
 - Phase 4: Evaluation campaign with KPI analysis
 
-## Next steps
+## Open questions / blockers
 
-- Phase 2: OMNeT++ network injection (packet loss, delay, jitter)
-- Phase 3: Konro resource management and energy modeling
-- Phase 4: Evaluation campaign with KPI analysis
+- None at this time
+
+---
+
+*End of PROJECT_LOG.md*
 
 ## Open questions / blockers
 
