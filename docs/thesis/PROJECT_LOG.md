@@ -110,7 +110,7 @@ This file records the chronological progress of the thesis project, including ma
 
 ## Status
 
-**Current phase:** Phase 3 — Konro resource management and energy modeling (in progress)
+**Current phase:** Phase 4 — Evaluation Campaign & KPI Analysis (in progress)
 
 **Git remote:** `https://github.com/alberto-iacona/coperception-integration-v2` (fork)  
 **Branch:** `feature/phase-1-carla-integration`
@@ -154,10 +154,18 @@ This file records the chronological progress of the thesis project, including ma
   computational energy model (Lin et al. ASPLOS 2018), safety KPIs (TTC, stopping distance,
   jerk, AoI), EV energy consumption impact, with 29 numbered sources
 
-### In progress (TASK-03)
+### Completed (TASK-03)
 - Konro resource management & energy modeling: energy_model.py, konro_integration.py,
   run_closed_loop.py integration
 - Specification document created: TASK-03_Konro_Resource_Energy.md
+- Live test SUCCESS: 2 vehicles, Town03, cooperation ON via OMNeT++, Konro enabled,
+  30s duration, 953 frames logged
+  - All three servers running simultaneously: CARLA (2000), OMNeT++ (5555), Konro (8080)
+  - konro_enabled=true, konro_pus tracked, p_total_w logged per frame
+  - Energy breakdown: p_idle=20W, p_core=32W, p_npu=25W, p_base=100W, total=161W
+  - Cumulative energy: 15343.3 J over 30 seconds
+  - Emergency brake functioning on both vehicles (TTC < 1.50s)
+  - Metrics saved to logs/carla_run/carlaloop_20261112_093035.json
 
 ## Next steps
 

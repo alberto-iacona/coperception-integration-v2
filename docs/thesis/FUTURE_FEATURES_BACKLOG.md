@@ -146,39 +146,49 @@ Each item includes: description, rationale, suggested phase, effort estimate, an
 ## 5. Phase 4 — Evaluation Campaign & KPI Analysis
 
 ### PF-16: Batch experiment runner
+**Status:** IMPLEMENTED in TASK-04 (`tools/carla/run_experiment_matrix.py`)  
 **Description:** Script that automatically runs multiple scenarios (different maps, vehicle counts, network conditions, cooperation on/off) and collects all metrics.  
 **Rationale:** Thesis requires statistical comparison across many runs, not just manual tests.  
 **Suggested phase:** Phase 4  
 **Effort:** Medium  
-**Dependencies:** `run_closed_loop.py` CLI, scenario config files (PF-04)
+**Dependencies:** `run_closed_loop.py` CLI, scenario config files (PF-04)  
+**Files:** `tools/carla/run_experiment_matrix.py`
 
 ### PF-17: Comparative analysis: Local vs. Cooperative vs. Cooperative+Konro
-**Description:** Benchmark three conditions: (1) local sensors only, (2) cooperative V2X without resource management, (3) cooperative V2X with Konro.  
+**Status:** IMPLEMENTED in TASK-04 (`tools/carla/analyze_results.py`)  
+**Description:** Benchmarks three conditions: (1) local sensors only, (2) cooperative V2X without resource management, (3) cooperative V2X with Konro.  
 **Rationale:** Core thesis evaluation: does Konro add value beyond raw cooperation?  
 **Suggested phase:** Phase 4  
 **Effort:** Medium  
-**Dependencies:** All previous phases working
+**Dependencies:** All previous phases working  
+**Files:** `tools/carla/analyze_results.py`
 
 ### PF-18: Safety/comfort KPIs (TTC, stopping distance, jerk, emergency brake count)
-**Description:** Compute and log vehicular safety and comfort metrics from CARLA vehicle dynamics.  
+**Status:** IMPLEMENTED in TASK-04 (`tools/carla/analyze_results.py`)  
+**Description:** Computes and logs vehicular safety and comfort metrics from CARLA vehicle dynamics and simulation data.  
 **Rationale:** The thesis must show that cooperative perception improves safety (or degrades gracefully when network fails).  
 **Suggested phase:** Phase 4  
 **Effort:** Low-Medium  
-**Dependencies:** CARLA vehicle telemetry, metrics logging
+**Dependencies:** CARLA vehicle telemetry, metrics logging  
+**Files:** `tools/carla/analyze_results.py`
 
 ### PF-19: Multi-map evaluation matrix
-**Description:** Run the same experiment on Town03, Town04, Town05, etc. to show generalization across urban layouts.  
+**Status:** IMPLEMENTED in TASK-04 (`tools/carla/run_experiment_matrix.py`)  
+**Description:** Runs the same experiment on Town03, Town04, Town05, etc. to show generalization across urban layouts.  
 **Rationale:** Demonstrates the system is not tuned to a single scenario.  
 **Suggested phase:** Phase 4  
 **Effort:** Low  
-**Dependencies:** `--map` CLI arg (already implemented)
+**Dependencies:** `--map` CLI arg (already implemented)  
+**Files:** `tools/carla/run_experiment_matrix.py`
 
 ### PF-20: N-vehicle scalability test (N > 6)
-**Description:** Test with 10, 20, 50 vehicles to evaluate network saturation and Konro behavior under load.  
+**Status:** PARTIALLY IMPLEMENTED in TASK-04  
+**Description:** Code supports N vehicles via `--num-vehicles` CLI arg; explicit tests with 10+ vehicles pending execution.  
 **Rationale:** Shows whether the system scales beyond the minimal 2-vehicle test.  
 **Suggested phase:** Phase 4  
 **Effort:** Medium  
-**Dependencies:** OMNeT++ performance, Konro scalability
+**Dependencies:** OMNeT++ performance, Konro scalability  
+**Files:** `tools/carla/run_experiment_matrix.py`
 
 ---
 
