@@ -9,9 +9,12 @@ Responsibilities:
     2. Send 'move' commands to update vehicle positions in the network simulator.
     3. Send 'send' commands to request feature map transmissions between vehicles.
     4. Receive 'received' notifications with delay and deliver status.
-    5. Store published bounding boxes per vehicle and provide them to partners
+    5. Track packet transmission statistics (sent, delivered, lost) for network
+       quality estimation.
+    6. Track Age of Information (AoI) for received packets.
+    7. Store published bounding boxes per vehicle and provide them to partners
        through the simulated network (deliver/delay decided by OMNeT++).
-    6. Provide network decisions (delivered/lost, delay) to CooperativeAgent.
+    8. Provide network decisions (delivered/lost, delay) to CooperativeAgent.
 
 Design notes:
     - Single TCP connection shared by all vehicles (central bridge pattern).
@@ -26,7 +29,8 @@ from __future__ import annotations
 import json
 import logging
 import socket
-from typing import Any, Dict, Optional, Tuple
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -77,6 +81,20 @@ class OmnetBridge:
         # Registry of latest boxes published by each vehicle (world coordinates)
         # Structure: { vehicle_id: {"boxes": np.ndarray[N, 7], "timestamp": float} }
         self._published_boxes: Dict[int, Dict[str, Any]] = {}
+
+        # Network quality tracking
+        # Total packets sent via transmit()
+        self._packets_sent: int = 0
+        # Packets delivered (received 'received' notification from OMNeT++)
+        self._packets_delivered: int = 0
+        # Packets lost (sent but no ACK received within timeout, or explicit drop)
+        self._packets_lost: int = 0
+        # Timestamp when each packet was sent: msg_id -> send_time
+        self._send_timestamps: Dict[str, float] = {}
+        # AoI values for received packets: list of (age_at_receipt) values
+        self._aoi_history: List[float] = []
+        # Max AoI history length to keep in memory
+        self._max_aoi_history: int = 100
 
         if self.enabled:
             self._connect()
@@ -276,6 +294,10 @@ class OmnetBridge:
                 return {"deliver": True, "delay_s": self.default_delay}
             return {"deliver": False, "delay_s": 0.0}
 
+        # Record packet sent for network quality tracking
+        self._packets_sent += 1
+        self._send_timestamps[msg_id] = time.time()
+
         # Channel delay: last known for this pair
         delay = max(0.0, self.latest_delays.get(pair_key, self.default_delay))
 
@@ -283,20 +305,10 @@ class OmnetBridge:
         pending = self._pending_losses.get(pair_key, 0)
         if pending > 0:
             self._pending_losses[pair_key] = pending - 1
+            self._packets_lost += 1
             return {"deliver": False, "delay_s": delay}
 
         return {"deliver": True, "delay_s": delay}
-
-    def _send_json(self, msg: Dict[str, Any]) -> None:
-        """Send a JSON command over the TCP socket."""
-        if not self._sock:
-            raise ConnectionError("bridge socket unavailable")
-        data = json.dumps(msg, separators=(",", ":")) + "\n"
-        try:
-            self._sock.sendall(data.encode("utf-8"))
-        except BlockingIOError:
-            # Buffer full: drop the command (best effort)
-            pass
 
     # ------------------------------------------------------------------
     # Receiving responses from OMNeT++
@@ -351,40 +363,79 @@ class OmnetBridge:
                     # Always update the known delay for this pair
                     self.latest_delays[pair_key] = delay
 
-                    # Track explicit delivery failures as pending losses
+                    # Track packet delivery statistics
+                    if not deliver:
+                        # Explicit delivery failure
+                        self._packets_lost += 1
+                    else:
+                        self._packets_delivered += 1
+                        # Calculate AoI: current time - send time of this packet
+                        send_time = self._send_timestamps.pop(msg_id, None)
+                        if send_time is not None:
+                            aoi = time.time() - send_time
+                            self._aoi_history.append(aoi)
+                            # Keep history bounded
+                            if len(self._aoi_history) > self._max_aoi_history:
+                                self._aoi_history = self._aoi_history[-self._max_aoi_history:]
+
+                    # Track explicit delivery failure as pending loss
                     if not deliver:
                         self._pending_losses[pair_key] = (
                             self._pending_losses.get(pair_key, 0) + 1
                         )
+
             except json.JSONDecodeError:
                 pass
 
     # ------------------------------------------------------------------
-    # Utilities
+    # Network quality metrics
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _parse_msg_id(msg_id: str) -> Tuple[Optional[str], Optional[int]]:
-        """Parse message ID of format 'sender->receiver#seq'.
+    def get_packet_loss_ratio(self) -> float:
+        """Return packet loss ratio (0.0 = no loss, 1.0 = all lost)."""
+        if self._packets_sent == 0:
+            return 0.0
+        return self._packets_lost / self._packets_sent
 
-        Returns (pair_key, seq) or (pair_key, None) for legacy format.
+    def get_recent_aois(self, max_age_seconds: float = 5.0) -> List[float]:
+        """Return list of Age of Information values for recent packets.
+
+        Args:
+            max_age_seconds: Maximum age in seconds to consider an AoI value
+                             "recent". Older values are discarded.
+
+        Returns:
+            List of AoI values in seconds for recently received packets.
         """
-        raw = str(msg_id).strip()
-        if not raw:
-            return None, None
+        current_time = time.time()
+        # Filter to recent values only
+        recent = [a for a in self._aoi_history if (current_time - a) <= max_age_seconds]
+        return recent
 
-        if "#" not in raw:
-            return raw, None
+    def get_average_delay(self) -> float:
+        """Return average delay across all pairs (seconds)."""
+        if not self.latest_delays:
+            return 0.0
+        return sum(self.latest_delays.values()) / len(self.latest_delays)
 
-        pair, seq_str = raw.rsplit("#", 1)
-        pair = pair.strip()
-        if not pair:
-            return None, None
+    # ------------------------------------------------------------------
+    # Send JSON helper
+    # ------------------------------------------------------------------
+
+    def _send_json(self, msg: Dict[str, Any]) -> None:
+        """Send a JSON command over the TCP socket."""
+        if not self._sock:
+            raise ConnectionError("bridge socket unavailable")
+        data = json.dumps(msg, separators=(",", ":")) + "\n"
         try:
-            seq = int(seq_str)
-        except (TypeError, ValueError):
-            return pair, None
-        return pair, seq
+            self._sock.sendall(data.encode("utf-8"))
+        except BlockingIOError:
+            # Buffer full: drop the command (best effort)
+            pass
+
+    # ------------------------------------------------------------------
+    # Close
+    # ------------------------------------------------------------------
 
     def _close(self) -> None:
         self._connected = False

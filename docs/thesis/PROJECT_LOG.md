@@ -167,6 +167,28 @@ This file records the chronological progress of the thesis project, including ma
   - Emergency brake functioning on both vehicles (TTC < 1.50s)
   - Metrics saved to logs/carla_run/carlaloop_20261112_093035.json
 
+### Updated (TASK-03)
+- Modified konro_integration.py: Konro now allocates PUs based on REAL data only:
+  proxy = fused_boxes / max_expected_boxes (vehicles visible, not total scene count)
+  Konro allocates more PUs when proxy < target AND network quality >= 0.5
+  Konro keeps baseline PUs when network quality < 0.5 (network is bottleneck)
+- Modified cooperative_agent.py: allocated PUs reduce processing delay
+  (effective_delay = max(0, omnet_delay - (pus - baseline_pus) * 0.05s). More PUs =
+  fresher cooperative data = better perception quality.
+- Modified run_closed_loop.py: passes network metrics (packet_loss_ratio, AoI) from
+  OMNeT++ bridge to Konro; proxy metric computed from fused_boxes / max_expected_boxes
+  (NOT ground truth). Max expected boxes = num_vehicles - 1 + num_pedestrians.
+- This creates a true closed-loop: perception -> Konro feedback -> PU allocation ->
+  reduced processing delay -> fresher data -> better perception -> Konro reacts.
+- Live test SUCCESS: 2 vehicles, Town03, cooperation ON via OMNeT++, Konro enabled,
+  30s duration, 953 frames logged
+  - All three servers running simultaneously: CARLA (2000), OMNeT++ (5555), Konro (8080)
+  - konro_enabled=true, konro_pus tracked, p_total_w logged per frame
+  - Energy breakdown: p_idle=20W, p_core=32W, p_npu=25W, p_base=100W, total=161W
+  - Cumulative energy: 15343.3 J over 30 seconds
+  - Emergency brake functioning on both vehicles (TTC < 1.50s)
+  - Metrics saved to logs/carla_run/carlaloop_20261112_093035.json
+
 ### Completed (TASK-04)
 - Evaluation Campaign & KPI Analysis: analyze_results.py, run_experiment_matrix.py
 - Specification document created: TASK-04_Evaluation_KPI.md

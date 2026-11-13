@@ -75,6 +75,8 @@ class CooperativeAgent(BehaviorAgent):
         enable_cooperation: bool = True,
         dataset_framerate: float = 5.0,
         max_buffer_sec: float = 2.0,
+        baseline_pus: int = 2,
+        max_pus: int = 8,
         **kwargs: Any,
     ) -> None:
         """Initialize the CooperativeAgent.
@@ -105,7 +107,9 @@ class CooperativeAgent(BehaviorAgent):
         self.bridge = bridge
         self.energy_model = energy_model
         self.konro = konro
-        self.konro_pus = 2  # Default baseline PUs; updated via set_konro_pus()
+        self.konro_pus = baseline_pus  # Default baseline PUs; updated via set_konro_pus()
+        self.baseline_pus = baseline_pus
+        self.max_pus = max_pus
         self.coop_partner_ids: List[int] = coop_partner_ids or []
         self.ttc_threshold = ttc_threshold
         self.enable_cooperation = enable_cooperation
@@ -199,8 +203,23 @@ class CooperativeAgent(BehaviorAgent):
                     self.store_partner_boxes(partner_id, partner_boxes, timestamp)
 
                     # Apply network delay: retrieve buffered box from the past
+                    # Konro-allocated PUs reduce processing delay: more PUs = fresher data
+                    pu_bonus = max(0, self.konro_pus - self.baseline_pus)
+                    processing_delay_reduction = pu_bonus * 0.05  # 50ms per extra PU
+                    effective_delay = max(0.0, delay_s - processing_delay_reduction)
+
+                    logger.debug(
+                        "Vehicle %d: raw_delay=%.3fs konro_pus=%d pu_bonus=%d "
+                        "effective_delay=%.3fs",
+                        self._vehicle.id,
+                        delay_s,
+                        self.konro_pus,
+                        pu_bonus,
+                        effective_delay,
+                    )
+
                     delayed_boxes = self._get_delayed_boxes(
-                        partner_id, partner_boxes, delay_s, timestamp
+                        partner_id, partner_boxes, effective_delay, timestamp
                     )
                     if delayed_boxes is not None and len(delayed_boxes) > 0:
                         all_boxes.append(delayed_boxes)

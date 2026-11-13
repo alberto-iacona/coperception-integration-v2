@@ -181,6 +181,37 @@ and run `git push origin feature/phase-1-carla-integration`.
    git push origin feature/phase-1-carla-integration
    ```
 
+## Issue #012 — Konro allocates PUs based on ground truth data
+
+**Date:** 2026-11-12  
+**Severity:** High (architectural flaw)  
+**Description:** Konro was allocating CPU PUs based on `num_gts = max_expected_boxes`, which is ground truth data that a real vehicle cannot know (total vehicles in scene).  
+**Root cause:** Proxy metric was computed as `num_boxes / max_expected_boxes` where `num_boxes` is actual detections and `max_expected_boxes` is the total number of agents in the scene. A real vehicle does not know how many vehicles exist in the scene.  
+**Resolution:** Changed proxy metric to `num_fused_boxes / max_expected_boxes` where `max_expected_boxes` is a configurable estimate of how many agents the ego vehicle *could* see (not ground truth). Konro now makes decisions based on observable data only: number of fused boxes received vs expected, plus network quality metrics (packet loss ratio, Age of Information).  
+**Files changed:** `tools/carla/konro_integration.py`, `tools/carla/run_closed_loop.py`  
+**Status:** Resolved
+
+## Issue #013 — Konro ignores network conditions when allocating PUs
+
+**Date:** 2026-11-12  
+**Severity:** High (architectural flaw)  
+**Description:** Konro allocated PUs based solely on perception quality, ignoring network conditions. If network is degraded (high packet loss, high AoI), allocating more PUs does not help because packets don't arrive.  
+**Resolution:** Konro now reads network quality from OMNeT++ bridge: packet_loss_ratio and Age of Information (AoI). Decision logic:  
+- proxy < target AND network_quality >= 0.5: allocate more PUs (perception can improve)  
+- proxy > target: decrease PUs (energy savings)  
+- proxy < target AND network_quality < 0.5: keep baseline PUs (network bottleneck, more CPU won't help)  
+**Files changed:** `konro_integration.py`, `run_closed_loop.py`, `omnet_bridge.py`  
+**Status:** Resolved
+
+## Issue #014 — Konro PUs do not affect vehicle perception
+
+**Date:** 2026-11-12  
+**Severity:** High (architectural flaw)  
+**Description:** Konro allocated PUs but they had no effect on vehicle perception. The `konro_pus` value was tracked but never used to affect processing delay.  
+**Resolution:** Modified `cooperative_agent.py` to use allocated PUs to reduce processing delay: `effective_delay = max(0, sim_delay - (pus - baseline_pus) * 0.05)`. More PUs = lower processing delay = fresher cooperative data = better perception quality. This creates a true closed-loop: perception -> Konro feedback -> PU allocation -> reduced processing delay -> fresher data -> better perception -> Konro reacts.  
+**Files changed:** `cooperative_agent.py`, `konro_integration.py`, `run_closed_loop.py`  
+**Status:** Resolved
+
 ---
 
 *End of ISSUES_AND_RESOLUTIONS.md*

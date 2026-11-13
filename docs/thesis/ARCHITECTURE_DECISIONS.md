@@ -98,6 +98,50 @@ This file documents every major architectural decision made during the project, 
 **Consequences:**
 - Initial validation uses 2 vehicles on Town03, but the same scripts scale to N vehicles and other maps.
 
+## AD-007: Konro allocates PUs based on real data, not ground truth
+
+**Decision:** Konro allocates Processing Units (PUs) based on proxy quality = fused_boxes / max_expected_boxes, where max_expected_boxes is a configurable estimate (not ground truth about total vehicles in scene). Network quality (packet loss, AoI) from OMNeT++ is also factored in.
+
+**Rationale:**
+- A real vehicle cannot know how many vehicles exist in the scene (ground truth).
+- A real vehicle can observe: how many cooperative boxes it receives vs how many it could expect, packet loss ratio, Age of Information.
+- Konro allocates more PUs when perception degrades AND network is good (more compute can help).
+- Konro keeps baseline PUs when network is poor (more compute won't help if packets don't arrive).
+- Konro decreases PUs when perception quality is high (energy savings).
+
+**Consequences:**
+- `konro_integration.py` computes proxy = num_fused_boxes / max_expected_boxes, not based on ground truth actor count.
+- `konro_integration.py` reads `packet_loss_ratio` and `aois` from OMNeT++ bridge.
+- Konro decision matrix: perception quality AND network quality both factor into PU allocation.
+
+## AD-008: Konro-allocated PUs affect vehicle perception processing delay
+
+**Decision:** CooperativeAgent uses Konro-allocated PUs to reduce processing delay: `effective_delay = max(0, sim_delay - (pus - baseline_pus) * 0.05)`. More PUs = less processing delay = fresher cooperative data = better perception quality.
+
+**Rationale:**
+- More CPU cores = faster feature extraction = less processing lag = fresher cooperative data.
+- This creates a true closed-loop: perception quality -> Konro feedback -> PU allocation -> reduced processing delay -> fresher data -> better perception -> Konro reacts.
+
+**Consequences:**
+- `cooperative_agent.py` uses `self.konro_pus` to reduce effective network delay.
+- `run_closed_loop.py` passes `konro_pus` to `CooperativeAgent` each frame.
+- If Konro allocates 0 PUs (baseline), processing delay is maximum (stale data).
+- If Konro allocates max PUs, processing delay is minimized (freshest data).
+
+## AD-009: No privileged CARLA ground truth in Konro feedback
+
+**Decision:** Konro receives only observable metrics: fused_boxes count / max_expected_boxes (proxy quality), packet_loss_ratio, Age of Information. No ground truth about number of vehicles in scene, true positions, etc.
+
+**Rationale:**
+- A real vehicle cannot know how many vehicles exist in the scene.
+- A real vehicle can observe: how many cooperative boxes it receives, packet loss, Age of Information.
+- Using ground truth would make the system unrealistic and not transferable to real vehicles.
+
+**Consequences:**
+- `run_closed_loop.py` computes proxy as `num_fused_boxes / max_expected_boxes` where `max_expected_boxes` is a configurable estimate (number of other vehicles + pedestrians), NOT ground truth actor count.
+- `konro_integration.py` does NOT use ground truth actor count for proxy calculation.
+- `omnet_bridge.py` provides packet_loss_ratio and aois (Age of Information) from actual packet transmission/reception timestamps.
+
 ---
 
 *End of ARCHITECTURE_DECISIONS.md*

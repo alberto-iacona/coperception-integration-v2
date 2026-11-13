@@ -179,6 +179,10 @@ def parse_args() -> argparse.Namespace:
         help="Minimum PUs guaranteed for safety functions (default: 2)",
     )
     parser.add_argument(
+        "--konro-max-pus", type=int, default=8,
+        help="Maximum PUs Konro can allocate (default: 8)",
+    )
+    parser.add_argument(
         "--num-pedestrians", type=int, default=4,
         help="Number of pedestrians (walkers) to spawn (default: 4)",
     )
@@ -402,22 +406,47 @@ class ClosedLoopSimulation:
                 # Read allocated PUs from Konro and update agent
                 konro_pus = self.args.konro_baseline_pus
                 if self.konro is not None:
-                    self.konro.read_allocated_pus()
-                    konro_pus = self.konro.current_pus
+                    konro_pus = self.konro.read_allocated_pus()
                 agent.set_konro_pus(konro_pus)
 
                 # Execute control step
                 control = agent.run_step()
                 vehicle.apply_control(control)
 
-                # Update Konro with proxy quality metric (use fused boxes count as proxy)
+                # Update Konro with perception feedback and network quality metrics
                 if self.konro is not None:
-                    # Proxy metric: based on fused boxes count (normalized 0-1)
-                    num_boxes = status["num_fused_boxes"] if (status := agent.get_perception_status()) else 0
-                    proxy = min(1.0, num_boxes / 5.0)  # 5 boxes = full quality proxy
+                    # Proxy metric based on REAL data only (no ground truth):
+                    # num_fused_boxes / max_expected_boxes gives the fraction of
+                    # cooperative data we successfully received. This is a real
+                    # metric the vehicle can compute from its own sensor data.
+                    status = agent.get_perception_status()
+                    num_boxes = status.get("num_fused_boxes", 0)
+                    
+                    # Max expected boxes = all other vehicles + pedestrians
+                    # (ego vehicle is excluded from its own perception)
+                    max_expected_boxes = max(1, self.args.num_vehicles - 1 + self.args.num_pedestrians)
+                    proxy = min(1.0, num_boxes / max_expected_boxes)
+
+                    # Read network quality from OMNeT++ bridge
+                    packet_loss_ratio = 0.0
+                    aois: List[float] = []
+                    if self.bridge is not None:
+                        packet_loss_ratio = self.bridge.get_packet_loss_ratio()
+                        aois = self.bridge.get_recent_aois(max_age_seconds=2.0)
+
+                    # Update Konro with both perception quality and network quality.
+                    # num_gts = max_expected_boxes represents how many vehicles
+                    # the ego vehicle COULD see (not ground truth, just total
+                    # possible targets in the scene).
+                    self.konro.update_network_quality(
+                        packet_loss_ratio=packet_loss_ratio,
+                        aois=aois,
+                        max_aoi_threshold=2.0,
+                    )
+
                     self.konro.update(
-                        num_gts=max(1, num_boxes),
-                        num_dets=max(1, num_boxes),
+                        num_gts=max_expected_boxes,
+                        num_dets=num_boxes,
                         num_tp=num_boxes,
                         frame_index=agent.get_perception_status()["consecutive_missing_frames"],
                     )
