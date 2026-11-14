@@ -257,7 +257,6 @@ class ScenarioSetup:
             ]
 
         walkers: List[carla.Walker] = []
-        walker_controllers: List[carla.WalkerAIController] = []
 
         for i in range(num_pedestrians):
             bp = random.choice(walker_bps)
@@ -271,27 +270,7 @@ class ScenarioSetup:
                 logger.warning("Failed to spawn pedestrian %s at transform %s", role_names[i], transform)
                 continue
 
-            # Spawn the AI controller for the walker
-            controller_bp = blueprint_library.find("controller.ai.walker")
-            controller = self.world.spawn_actor(
-                controller_bp,
-                carla.Transform(),
-                attach_to=walker,
-            )
-
-            # Start the controller
-            controller.start()
-
-            if speed > 0.0:
-                controller.go_to_location(
-                    self.world.get_random_location_from_navigation()
-                )
-                controller.set_max_speed(speed)
-
-            self.world.tick()  # Let the walker initialize
-
             walkers.append(walker)
-            walker_controllers.append(controller)
 
             logger.info(
                 "Spawned pedestrian %s at transform %s (id=%d)",
@@ -302,7 +281,6 @@ class ScenarioSetup:
 
         # Store walkers for later cleanup
         self.pedestrians = walkers
-        self.pedestrian_controllers = walker_controllers
 
         logger.info("Spawned %d pedestrians.", len(walkers))
         return walkers

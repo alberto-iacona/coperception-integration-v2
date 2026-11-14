@@ -142,6 +142,22 @@ This file documents every major architectural decision made during the project, 
 - `konro_integration.py` does NOT use ground truth actor count for proxy calculation.
 - `omnet_bridge.py` provides packet_loss_ratio and aois (Age of Information) from actual packet transmission/reception timestamps.
 
+## AD-010: Konro disabled = all PUs allocated (full compute capacity)
+
+**Decision:** When Konro is disabled (konro_enabled=False), each vehicle uses ALL available Processing Units (max_pus), not baseline_pus. Konro disabled means the vehicle uses full computational capacity for perception processing, as there is no resource manager to throttle it.
+
+**Rationale:**
+- When Konro is disabled, the vehicle runs with full computational capacity, as there is no resource manager to throttle it.
+- Konro is a resource manager that dynamically allocates PUs based on perception quality and network conditions. When disabled, there is no resource management, so the vehicle uses all available CPU cores for perception processing.
+- This creates a clear experimental comparison: Konro ON (dynamic PU allocation based on proxy quality and network conditions) vs Konro OFF (all PUs always allocated = maximum compute capacity).
+
+**Consequences:**
+- `run_closed_loop.py`: when konro_enabled=False, konro_pus = konro_max_pus (not baseline_pus).
+- `konro_integration.py`: when konro_enabled=False, allocated_pus stays at baseline_pus (Konro is disabled, no dynamic allocation).
+- `cooperative_agent.py`: uses konro_pus value passed from run_closed_loop.py to compute effective_delay = max(0, sim_delay - (pus - baseline_pus) * 0.05). With konro_pus = max_pus, processing delay reduction is maximized.
+- Enables direct comparison: Konro ON (dynamic PU allocation based on proxy quality and network conditions) vs Konro OFF (all PUs always allocated = maximum compute capacity).
+- Provides clear experimental comparison for thesis: does dynamic Konro allocation provide better perception quality per watt than always-max PUs?
+
 ---
 
 *End of ARCHITECTURE_DECISIONS.md*

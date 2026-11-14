@@ -108,7 +108,7 @@ Each item includes: description, rationale, suggested phase, effort estimate, an
 
 ### PF-12: Konro feedback from perception quality (EMA of recall/proxy)
 **Status:** IMPLEMENTED in TASK-03 (`tools/carla/konro_integration.py`)  
-**Description:** Uses the proxy metric (fused boxes count normalized 0-1) as feedback to Konro for PU allocation via HTTP POST.  
+**Description:** Uses proxy metric (fused boxes count normalized 0-1) as feedback to Konro for dynamic PU allocation. Konro increases PUs when proxy < target-0.05 and decreases PUs when proxy > target+0.05. This simulates Konro making real resource allocation decisions for the vehicle's onboard computer.  
 **Rationale:** When perception degrades, Konro allocates more PUs to speed up inference; when network is the bottleneck, Konro drops to baseline_pus to save energy.  
 **Suggested phase:** Phase 3  
 **Effort:** Medium  
@@ -116,25 +116,26 @@ Each item includes: description, rationale, suggested phase, effort estimate, an
 **Files:** `tools/carla/konro_integration.py`, `tools/carla/run_closed_loop.py`
 
 ### PF-13: Age of Information (AoI) tracking
-**Status:** PARTIALLY IMPLEMENTED in TASK-03  
-**Description:** AoI is tracked implicitly via OMNeT++ delay notifications and Konro feedback interval. Explicit AoI logging per partner stream can be added in Phase 4.  
-**Rationale:** AoI is a key KPI for network-aware perception; high AoI means stale data is being used for driving decisions.  
-**Suggested phase:** Phase 3/4  
+**Status:** IMPLEMENTED in TASK-03 (`tools/carla/cooperative_agent.py`)  
+**Description:** AoI is tracked explicitly via OMNeT++ delay notifications (`delay_s` from `received` messages) and Konro feedback interval. Konro-allocated PUs reduce effective processing delay: `effective_delay = max(0, omnet_delay - (pus - baseline_pus) * 0.05s)`. More PUs = fresher cooperative data = lower AoI.  
+**Suggested phase:** Phase 3  
 **Effort:** Low-Medium  
-**Dependencies:** `omnet_bridge.py` (received timestamps), metrics logging
+**Dependencies:** `omnet_bridge.py`, `cooperative_agent.py`, `konro_integration.py`  
+**Files:** `tools/carla/cooperative_agent.py`, `tools/carla/konro_integration.py`
 
 ### PF-14: Timeout / radio blackout handling
 **Status:** IMPLEMENTED in TASK-03 (`tools/carla/konro_integration.py`)  
-**Description:** KonroIntegration degrades gracefully when Konro is unreachable: keeps baseline_pus and does not crash. run_closed_loop.py handles Konro=None case.  
+**Description:** KonroIntegration degrades gracefully when Konro is unreachable: keeps baseline_pus and does not crash. run_closed_loop.py handles konro_enabled=False case.  
 **Rationale:** Safety-critical: when V2X is disconnected, the vehicle must conserve energy and rely on local sensors.  
 **Suggested phase:** Phase 3  
 **Effort:** Medium  
 **Dependencies:** Konro, `omnet_bridge.py`, `cooperative_agent.py`  
-**Files:** `tools/carla/konro_integration.py`, `tools/carla/run_closed_loop.py`
+**Files:** `tools/carla/konro_integration.py`, `tools/carla/run_closed_loop.py`  
+**Note:** When konro_enabled=False (Konro disabled), the system uses max_pus (all CPU cores) for full compute capacity. Konro is disabled, so all PUs are allocated for maximum compute capacity. This is documented in docs/thesis/ARCHITECTURE_DECISIONS.md as AD-010.
 
 ### PF-15: Energy consumption logging (Joules per frame)
 **Status:** IMPLEMENTED in TASK-03 (`tools/carla/energy_model.py`, `tools/carla/run_closed_loop.py`)  
-**Description:** Logs instantaneous power (W), cumulative energy (J), PUs allocated, and per-frame breakdown (idle, core, NPU, base vehicle) for the ego vehicle.  
+**Description:** Logs instantaneous power (W), cumulative energy (J), PUs allocated, and per-frame breakdown (idle, core, NPU, base vehicle) for the ego vehicle. Konro PU allocation directly affects power consumption via `P_core * PUs`.  
 **Rationale:** Enables Pareto analysis: perception quality vs. energy consumption.  
 **Suggested phase:** Phase 3  
 **Effort:** Medium  

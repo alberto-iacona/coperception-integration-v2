@@ -281,6 +281,7 @@ class OmnetBridge:
             "dst": str(receiver),
             "size": str(size_bytes),
             "id": msg_id,
+            "send_time": time.time(),  # Timestamp di invio per calcolo AoI dal ricevente
         }
 
         try:

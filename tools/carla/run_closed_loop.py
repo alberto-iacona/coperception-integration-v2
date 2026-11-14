@@ -404,9 +404,13 @@ class ClosedLoopSimulation:
                 agent.update_perception(local_boxes, sim_timestamp)
 
                 # Read allocated PUs from Konro and update agent
-                konro_pus = self.args.konro_baseline_pus
+                # If Konro is disabled, use all available PUs (max_pus) - full compute capacity
+                # If Konro is enabled, use the dynamically allocated PUs
                 if self.konro is not None:
                     konro_pus = self.konro.read_allocated_pus()
+                else:
+                    # Konro disabled: use all available PUs (max_pus)
+                    konro_pus = self.args.konro_max_pus
                 agent.set_konro_pus(konro_pus)
 
                 # Execute control step
